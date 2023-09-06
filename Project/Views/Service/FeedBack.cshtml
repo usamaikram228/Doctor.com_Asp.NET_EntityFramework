@@ -1,0 +1,221 @@
+﻿@using System.Text.Json
+@using System.Web
+@*@*
+    For more information on enabling MVC for empty projects, visit https://go.microsoft.com/fwlink/?LinkID=397860
+*@
+@{
+    Layout = "_Layout";
+}
+@using Project.Models
+
+
+<style>
+    .center-content {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        height: 100vh;
+    }
+
+    .content-wrapper {
+        width: 80%; /* Adjust the width as needed */
+    }
+
+    .card-body {
+        background-color: #f8f9fa;
+        padding: 10px;
+        border-radius: 5px;
+        margin-bottom: 20px;
+    }
+
+    .rating-input {
+        margin-bottom: 10px;
+    }
+
+    .comments-input {
+        margin-bottom: 20px;
+    }
+</style>
+
+
+<div class="center-content">
+    <div class="content-wrapper" id="feedbackContainer">
+        @if (Model.Count > 0)
+        {
+            <h2 class="text-center mb-4">Dr.@Model[0].Doctor.Name</h2>
+        }
+      
+        @foreach (var feedback in Model)
+        {
+            <div class="col-md-6">
+                <div class="card mb-3">
+                    <div class="card-body">
+                        <h6 class="card-subtitle mb-2 text-muted">Patient: @feedback.Patient.Name</h6>
+                        <p class="card-text">@feedback.Comments</p>
+                        <p class="card-text">Rating: 10/@feedback.Rating</p>
+                        <p class="card-text">Time: @feedback.TimeStamp.ToString("yyyy-MM-dd HH:mm:ss")</p>
+                    </div>
+                </div>
+            </div>
+        }
+        
+       
+   
+        
+        <form>
+            <div class="form-group rating-input">
+                <label for="rating">Rating:</label>
+                <input type="number" class="form-control" id="rating" name="rating" min="1" max="10" required>
+            </div>
+
+            <div class="form-group comments-input">
+                <label for="comments">Comments:</label>
+                <textarea class="form-control" id="comments" name="comments" rows="3" required></textarea>
+            </div>
+
+            <div class="text-center">
+                <button type="submit" class="btn btn-primary" id="submitId">Submit</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script src="~/js/signalr/signalr.min.js"></script>
+<script src="~/js/signalr/signalr.js"></script>
+<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.4.1/jquery.min.js"></script>
+
+<script>
+    
+    function getCookieValue(cookieName) {
+        var name = cookieName + "=";
+        var decodedCookie = decodeURIComponent(document.cookie);
+        var cookieArray = decodedCookie.split(';');
+
+        for (var i = 0; i < cookieArray.length; i++) {
+            var cookie = cookieArray[i].trim();
+
+            // Check if the cookie starts with the specified name
+            if (cookie.indexOf(name) === 0) {
+                // Extract and return the cookie value
+                return cookie.substring(name.length);
+            }
+        }
+
+        // Cookie not found
+        return null;
+    }
+    var loggedInUserName = getCookieValue('loggedInUserName');
+    var loggedInUserId = getCookieValue('loggedInUserId');
+
+    console.log(loggedInUserId);
+    function getCurrentDateTime() {
+        var currentDate = new Date();
+
+        var year = currentDate.getFullYear();
+        var month = (currentDate.getMonth() + 1).toString().padStart(2, '0');
+        var day = currentDate.getDate().toString().padStart(2, '0');
+        var hours = currentDate.getHours().toString().padStart(2, '0');
+        var minutes = currentDate.getMinutes().toString().padStart(2, '0');
+        var seconds = currentDate.getSeconds().toString().padStart(2, '0');
+
+        var dateTimeString = `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
+        return dateTimeString;
+    }
+
+    // Usage:
+    var currentDateTime = getCurrentDateTime();
+    //console.log(currentDateTime);
+
+    // Usage:
+  
+    function getQueryParameter(name) {
+        const urlParams = new URLSearchParams(window.location.search);
+        return urlParams.get(name);
+    }
+    var id = getQueryParameter('id');
+
+
+
+    var connection = new signalR.HubConnectionBuilder().withUrl("/feedbackHub").build();
+
+    connection.on("ReceiveFeedback", function (doctorId, rating, comments) {
+        $(document).ready(function () {
+            
+            // Assume you have the necessary data available in JavaScript variables
+            var patientName = loggedInUserName;
+            // var feedbackComments = "Excellent doctor, very knowledgeable and caring";
+            //var feedbackRating = 9;
+            var feedbackTimestamp = currentDateTime;
+
+            // Create the HTML code dynamically
+            var cardDiv = $("<div>").addClass("col-md-6");
+            var card = $("<div>").addClass("card mb-3");
+            var cardBody = $("<div>").addClass("card-body");
+            var patientSubtitle = $("<h6>").addClass("card-subtitle mb-2 text-muted").text("Patient: " + patientName);
+            var commentsParagraph = $("<p>").addClass("card-text").text(comments);
+            var ratingParagraph = $("<p>").addClass("card-text").text("Rating: 10/" + rating);
+            var timestampParagraph = $("<p>").addClass("card-text").text("Time: " + feedbackTimestamp);
+
+            // Append the elements to build the structure
+            cardBody.append(patientSubtitle, commentsParagraph, ratingParagraph, timestampParagraph);
+            card.append(cardBody);
+            cardDiv.append(card);
+
+            // Append the complete card to the feedbackContainer
+            $("#feedbackContainer").append(cardDiv);
+        });
+    });
+    connection.start().then(function () {
+        console.log("SignalR connected.");
+    }).catch(function (err) {
+        return console.error(err.toString());
+    });
+    document.getElementById("submitId").addEventListener("click", function (event) {
+        event.preventDefault();
+       
+        var rating = document.getElementById("rating").value;
+        var element = document.getElementById("comments");
+
+        // Get the value of the element
+        var comments = element.value;
+        doctorId = parseInt(id);
+        rating = parseInt(rating);
+        var timestamp = new Date().toISOString();
+        var data = {
+            doctorId: doctorId,
+            patientId: loggedInUserId,
+            rating: rating,
+            comments: comments,
+            timestamp: timestamp
+        };
+
+        // Send the feedback data to the controller using AJAX
+        $.ajax({
+            url: "/Service/SubmitFeedback",
+            type: "POST",
+            data: data,
+            success: function (response) {
+                // Handle the success response (e.g., display a success message)
+                console.log("Feedback submitted successfully.");
+            },
+            error: function (xhr, status, error) {
+                // Handle the error response
+                console.error("Error submitting feedback:");
+                console.error("Status:", status);
+                console.error("Error:", error);
+
+                // Display an error message to the user
+                alert("Error submitting feedback. Please try again later.");
+            }
+
+        });
+
+
+        connection.invoke("SendFeedback", doctorId, rating, comments).catch(function (err) {
+            return console.error(err.toString());
+        });
+
+    });
+
+
+</script>
